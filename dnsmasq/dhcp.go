@@ -14,7 +14,7 @@ import (
 )
 
 // for fields descriptions, see: https://narkive.com/goLCUHEc
-var rgxLease = regexp.MustCompile(`(\d{10}) (\S+) (\S+) (\S+) \S+`)
+var rgxLease = regexp.MustCompile(`(\d{10}|0) (\S+) (\S+) (\S+) \S+`)
 
 // Lease is the representation of DHCP lease from DNSMasq.
 type Lease struct {
@@ -73,10 +73,15 @@ func ReadLeases(reader io.Reader) ([]*Lease, error) {
 		}
 
 		if matchLease := rgxLease.FindStringSubmatch(line); matchLease != nil {
-			exp, errExp := strconv.ParseInt(matchLease[1], 10, 64)
-			if errExp != nil {
-				return leases, errExp
+			expInt, errExpInt := strconv.ParseInt(matchLease[1], 10, 64)
+			if errExpInt != nil {
+				return leases, errExpInt
 			}
+			var exp time.Time
+			if expInt != 0 {
+				exp = time.Unix(expInt, 0)
+			}
+
 			mac, errMac := net.ParseMAC(matchLease[2])
 			if errMac != nil {
 				return leases, errMac
@@ -86,8 +91,7 @@ func ReadLeases(reader io.Reader) ([]*Lease, error) {
 				return leases, errIp
 			}
 
-			leases = append(leases,
-				&Lease{Expires: time.Unix(exp, 0), MacAddr: mac, IPAddr: ip, Hostname: matchLease[4]})
+			leases = append(leases, &Lease{Expires: exp, MacAddr: mac, IPAddr: ip, Hostname: matchLease[4]})
 		}
 	}
 
