@@ -19,6 +19,9 @@ const exampleLease1 = `
 const exampleLease2 = `
 123 garbage
 1706997804 3d:14:49:d5:dd:f1 127.0.0.1 localhost 01:3d:14:49:d5:dd:f1
+`
+
+const exampleLease3 = `
 0123456789 yeah:D this looks valid
 `
 
@@ -50,22 +53,40 @@ func TestWatchLeases(t *testing.T) {
 	defer leaseFile.Close()
 
 	leaseChan := make(chan []*Lease, 1)
-	go WatchLeases(ctx, leaseFile.Name(), leaseChan)
+	errChan := make(chan error, 1)
+	go func() { errChan <- WatchLeases(ctx, leaseFile.Name(), leaseChan) }()
 
 	// give some time for syscall registration
 	time.Sleep(100 * time.Millisecond)
 
-	if _, errWrite1 := leaseFile.WriteString(exampleLease1); errWrite1 != nil {
+	if _, errWrite1 := leaseFile.WriteString(`\n`); errWrite1 != nil {
 		t.Fatal(errWrite1)
 	}
-	testCommon(t, <-leaseChan)
+	l1 := <-leaseChan
+	equal(t, 0, len(l1))
+	equal(t, 0, len(errChan))
 
-	if _, errWrite2 := leaseFile.WriteString(exampleLease2); errWrite2 != nil {
+	if _, errWrite2 := leaseFile.WriteString(exampleLease1); errWrite2 != nil {
 		t.Fatal(errWrite2)
 	}
-	leases := <-leaseChan
-	equal(t, 3, len(leases))
-	equal(t, "localhost", leases[2].Hostname)
+	l2 := <-leaseChan
+	testCommon(t, l2)
+	equal(t, 0, len(errChan))
+
+	if _, errWrite3 := leaseFile.WriteString(exampleLease2); errWrite3 != nil {
+		t.Fatal(errWrite3)
+	}
+	l3 := <-leaseChan
+	equal(t, 3, len(l3))
+	equal(t, "localhost", l3[2].Hostname)
+	equal(t, 0, len(errChan))
+
+	if _, errWrite4 := leaseFile.WriteString(exampleLease3); errWrite4 != nil {
+		t.Fatal(errWrite4)
+	}
+	l4 := <-leaseChan
+	equal(t, 0, len(l4))
+	equal(t, "address yeah:D: invalid MAC address", (<-errChan).Error())
 
 	cancel()
 	<-leaseChan

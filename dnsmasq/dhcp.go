@@ -47,12 +47,10 @@ func WatchLeases(ctx context.Context, filePath string, output chan<- []*Lease) e
 		}
 
 		leases, errRead := ReadLeases(leaseFile)
-		if len(leases) > 0 {
-			output <- leases
-		}
 		if errRead != nil {
 			return errRead
 		}
+		output <- leases
 	}
 
 	return nil
